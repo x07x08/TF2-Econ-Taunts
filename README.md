@@ -2,7 +2,7 @@
 
 This is a taunts menu plugin similar to [TF2 Taunts TF2IDB](https://github.com/fakuivan/TF2-Taunts-TF2IDB).
 
-Obviously, as the name implies, this plugin uses [TFEconData](https://github.com/nosoop/SM-TFEconData) and it also features somewhat working unusual taunts.
+Obviously, as the name implies, it uses [TFEconData](https://github.com/nosoop/SM-TFEconData) and it also features somewhat working unusual taunts.
 
 # Commands
 
