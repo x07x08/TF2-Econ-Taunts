@@ -19,6 +19,7 @@ Obviously, as the name implies, it uses [TFEconData](https://github.com/nosoop/S
 
 * Some taunt particles are not positioned correctly.
 * Some taunt particles leave remnants after the taunt has ended.
+* Taunt particles that refire will not do so.
 
 If there are any other issues, please report them using the [Issues](https://github.com/x07x08/TF2-Econ-Taunts/issues) tab.
 
