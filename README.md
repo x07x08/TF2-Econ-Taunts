@@ -1,13 +1,26 @@
+# Description
+
+This is a taunts menu plugin similar to [TF2 Taunts TF2IDB](https://github.com/fakuivan/TF2-Taunts-TF2IDB).
+
+Obviously, as the name implies, this plugin uses [TFEconData](https://github.com/nosoop/SM-TFEconData) and it also features somewhat working unusual taunts.
+
 # Commands
 
-  | Commands          | Description                               |
-  |-------------------|-------------------------------------------|
-  | sm_taunt          | Displays the taunts menu                  |
-  | sm_taunts         | Alternative to sm_taunt                   |
-  | sm_unusualtaunt   | Displays the unusual taunt particles menu |
-  | sm_unusualtaunts  | Alternative to sm_unusualtaunt            |
-  | sm_utaunt         | Alternative to sm_unusualtaunt            |
-  | sm_utaunts        | Alternative to sm_unusualtaunt            |
+  | Commands           | Description                               |
+  |--------------------|-------------------------------------------|
+  | `sm_taunt`         | Displays the taunts menu                  |
+  | `sm_taunts`        | Alternative to `sm_taunt`                 |
+  | `sm_unusualtaunt`  | Displays the unusual taunt particles menu |
+  | `sm_unusualtaunts` | Alternative to `sm_unusualtaunt`          |
+  | `sm_utaunt`        | Alternative to `sm_unusualtaunt`          |
+  | `sm_utaunts`       | Alternative to `sm_unusualtaunt`          |
+
+# Issues
+
+* Some taunt particles are not positioned correctly.
+* Some taunt particles leave remnants after the taunt has ended.
+
+If there are any other issues, please report them using the [Issues](https://github.com/x07x08/TF2-Econ-Taunts/issues) tab.
 
 # Installation
 
