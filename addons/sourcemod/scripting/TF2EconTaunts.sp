@@ -2,7 +2,7 @@
 #pragma newdecls required
 
 #define PLUGIN_AUTHOR "x07x08"
-#define PLUGIN_VERSION "1.0.0"
+#define PLUGIN_VERSION "1.1.0"
 
 #define DEFINDEX_UNDEFINED 65535
 
@@ -24,7 +24,10 @@
 Handle    g_hPlayTaunt;
 StringMap g_hLanguages;
 int       g_iClientParticleIndex [MAXPLAYERS + 1];
-int       g_iClientParticleEntity[MAXPLAYERS + 1];
+int       g_iClientParticleEntity[MAXPLAYERS + 1] = {-1, ...};
+bool      g_bClientShouldSee     [MAXPLAYERS + 1];
+ArrayList g_hUnusualTauntsList;
+ConVar    g_hCvarVariation;
 
 enum ParticleAttachmentType
 {
@@ -37,13 +40,21 @@ enum ParticleAttachmentType
     PATTACH_ROOTBONE_FOLLOW   // Create at the root bone of the entity, and update to follow
 };
 
+enum struct UnusualTauntConfig
+{
+	int   ParticleIndex;
+	float RefireInterval;
+	bool  UseParticleSystem;
+	bool  Disabled;
+}
+
 public Plugin myinfo = 
 {
-	name = "[TF2] Econ Taunts",
-	author = PLUGIN_AUTHOR,
+	name        = "[TF2] Econ Taunts",
+	author      = PLUGIN_AUTHOR,
 	description = "A simple taunt menu plugin",
-	version = PLUGIN_VERSION,
-	url = ""
+	version     = PLUGIN_VERSION,
+	url         = ""
 };
 
 public void OnPluginStart()
@@ -78,19 +89,73 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_unusualtaunts", CmdUnusualTauntsMenu);
 	RegConsoleCmd("sm_utaunts", CmdUnusualTauntsMenu);
 	
+	RegAdminCmd("sm_refreshtaunts", CmdRefreshConfig, ADMFLAG_CONFIG, "Reloads the taunts configuration file");
+	
+	g_hCvarVariation = CreateConVar("sm_econtaunts_refire", "0.05", "Time variation between particle restarts.", _, true, 0.0);
+	
+	HookEvent("player_spawn", OnPlayerSpawn);
+	
 	g_hLanguages = new StringMap();
+	g_hLanguages.SetValue("english", ParseLanguage("english"));
 }
 
 public void OnClientDisconnect(int iClient)
 {
-	g_iClientParticleIndex[iClient] = 0;
-	g_iClientParticleEntity[iClient] = 0;
+	g_iClientParticleIndex[iClient]  = 0;
+	g_iClientParticleEntity[iClient] = -1;
+	g_bClientShouldSee[iClient]      = false;
 }
 
 public void OnClientConnected(int iClient)
 {
-	g_iClientParticleIndex[iClient] = 0;
-	g_iClientParticleEntity[iClient] = 0;
+	g_iClientParticleIndex[iClient]  = 0;
+	g_iClientParticleEntity[iClient] = -1;
+	g_bClientShouldSee[iClient]      = false;
+}
+
+public void OnMapStart()
+{
+	ParseTauntConfig();
+}
+
+public Action OnPlayerSpawn(Event hEvent, char[] strEventName, bool bDontBroadcast)
+{
+	int iClient = GetClientOfUserId(hEvent.GetInt("userid"));
+	
+	char strEffectName[PLATFORM_MAX_PATH];
+	int  iParticleIndex, iParticleEntity;
+	
+	if (GetClientTeam(iClient) > 0 && !g_bClientShouldSee[iClient])
+	{
+		for (int iIndex = 1; iIndex <= MaxClients; iIndex++)
+		{
+			iParticleIndex  = g_iClientParticleIndex[iIndex];
+			iParticleEntity = EntRefToEntIndex(g_iClientParticleEntity[iIndex]);
+			
+			UnusualTauntConfig Taunt;
+			bool bParticleSystem = false;
+			
+			int iUnusualConfigIndex = g_hUnusualTauntsList == null ? -1 : g_hUnusualTauntsList.FindValue(iParticleIndex, 0);
+			if (iUnusualConfigIndex != -1)
+			{
+				g_hUnusualTauntsList.GetArray(iUnusualConfigIndex, Taunt);
+				bParticleSystem = Taunt.UseParticleSystem;
+			}
+			
+			if (iParticleEntity == -1 || !iParticleIndex || bParticleSystem || (Taunt.RefireInterval > 0))
+			{
+				continue;
+			}
+			
+			TF2Econ_GetParticleAttributeSystemName(iParticleIndex, strEffectName, sizeof(strEffectName));
+			CreateTempParticle(strEffectName, _, _,  _, iParticleEntity, PATTACH_ABSORIGIN_FOLLOW, _, _);
+			TE_SendToClient(iClient);
+		}
+		
+		g_bClientShouldSee[iClient] = true;
+	}
+	
+	return Plugin_Continue;
 }
 
 public Action CmdTauntMenu(int iClient, int iArgs)
@@ -177,18 +242,42 @@ public Action CmdUnusualTauntsMenu(int iClient, int iArgs)
 	
 	for (int iEntry = 0; iEntry < iUnusualsListSize; iEntry++)
 	{
+		UnusualTauntConfig Taunt;
+		bool bUseUnusual = false;
+		
 		int iUnusualIndex = hUnusualsList.Get(iEntry);
 		IntToString(iUnusualIndex, strUnusualIndex, sizeof(strUnusualIndex));
 		
 		FormatEx(strUnusualName, sizeof(strUnusualName), "Attrib_Particle%i", iUnusualIndex);
-		LocalizeToken(iClient, strUnusualName, strLocalizedName, sizeof(strLocalizedName));
 		
-		hMenu.AddItem(strUnusualIndex, strLocalizedName, ITEMDRAW_DEFAULT);
+		if (LocalizeToken(strUnusualName, strLocalizedName, sizeof(strLocalizedName)))
+		{
+			Format(strLocalizedName, sizeof(strLocalizedName), "%s (%i)", strLocalizedName, iUnusualIndex);
+		}
+		
+		int iUnusualConfigIndex = g_hUnusualTauntsList == null ? -1 : g_hUnusualTauntsList.FindValue(iUnusualIndex, 0);
+		
+		if (iUnusualConfigIndex != -1)
+		{
+			g_hUnusualTauntsList.GetArray(iUnusualConfigIndex, Taunt);
+			bUseUnusual = Taunt.Disabled;
+		}
+		
+		hMenu.AddItem(strUnusualIndex, strLocalizedName, bUseUnusual ? ITEMDRAW_DISABLED : ITEMDRAW_DEFAULT);
 	}
 	
 	hMenu.Display(iClient, MENU_TIME_FOREVER);
 	
 	delete hUnusualsList;
+	
+	return Plugin_Handled;
+}
+
+public Action CmdRefreshConfig(int iClient, int iArgs)
+{
+	ParseTauntConfig();
+	
+	ReplyToCommand(iClient, "[SM] Successfully refreshed the taunts configuration file");
 	
 	return Plugin_Handled;
 }
@@ -314,6 +403,81 @@ stock bool IsValidAddress(Address pAddress)
 	return pAddress != Address_Null;
 }
 
+void ParseTauntConfig()
+{
+	delete g_hUnusualTauntsList;
+	
+	char strFilePath[PLATFORM_MAX_PATH];
+	BuildPath(Path_SM, strFilePath, sizeof(strFilePath), "configs/econtaunts/taunts.cfg");
+	
+	if (FileExists(strFilePath, true))
+	{
+		KeyValues kvTauntConfig = new KeyValues("EconTaunts");
+		
+		if (kvTauntConfig.ImportFromFile(strFilePath))
+		{
+			if (kvTauntConfig.GotoFirstSubKey())
+			{
+				g_hUnusualTauntsList = new ArrayList(sizeof(UnusualTauntConfig));
+				
+				do
+				{
+					ParseTaunts(kvTauntConfig);
+				}
+				while (kvTauntConfig.GotoNextKey());
+			}
+		}
+		
+		delete kvTauntConfig;
+	}
+}
+
+void ParseTaunts(KeyValues kvConfig)
+{
+	kvConfig.GotoFirstSubKey();
+	
+	char strTauntIndex[16];
+	int  iTauntIndex;
+	
+	do
+	{
+		if (kvConfig.GetSectionName(strTauntIndex, sizeof(strTauntIndex)))
+		{
+			iTauntIndex = StringToInt(strTauntIndex);
+			if (iTauntIndex > 0 && !IsTauntAdded(iTauntIndex))
+			{
+				UnusualTauntConfig Taunt;
+				
+				Taunt.ParticleIndex     = iTauntIndex;
+				Taunt.RefireInterval    = kvConfig.GetFloat("refire interval", 0.0);
+				Taunt.Disabled          = !!kvConfig.GetNum("disabled", 0);
+				Taunt.UseParticleSystem = !!kvConfig.GetNum("use particle system", 0);
+				
+				g_hUnusualTauntsList.PushArray(Taunt);
+			}
+		}
+	}
+	while (kvConfig.GotoNextKey());
+	kvConfig.GoBack();
+}
+
+bool IsTauntAdded(int iTauntIndex)
+{
+	UnusualTauntConfig Taunt;
+	
+	int iArrayIndex = g_hUnusualTauntsList == null ? -1 : g_hUnusualTauntsList.FindValue(iTauntIndex, 0);
+	if (iArrayIndex != -1)
+	{
+		if (g_hUnusualTauntsList.GetArray(iArrayIndex, Taunt) > 0)
+		{
+			LogMessage("Taunt Index : %i found twice, skipping.", Taunt.ParticleIndex);
+			return true;
+		}
+	}
+	
+	return false;
+}
+
 public void TF2_OnConditionAdded(int iClient, TFCond iCondition)
 {
 	if (iCondition == TFCond_Taunting)
@@ -322,14 +486,59 @@ public void TF2_OnConditionAdded(int iClient, TFCond iCondition)
 		
 		if (iParticleIndex != 0)
 		{
-			int iParticleEntity = CreateAttachedParticle(iClient, iParticleIndex);
+			UnusualTauntConfig Taunt;
+			bool bParticleSystem = false;
 			
-			if (iParticleEntity && IsValidEntity(iParticleEntity))
+			int iUnusualConfigIndex = g_hUnusualTauntsList == null ? -1 : g_hUnusualTauntsList.FindValue(iParticleIndex, 0);
+			if (iUnusualConfigIndex != -1)
 			{
+				g_hUnusualTauntsList.GetArray(iUnusualConfigIndex, Taunt);
+				bParticleSystem = Taunt.UseParticleSystem;
+			}
+			
+			int iParticleEntity = CreateAttachedParticle(iClient, iParticleIndex);
+			if (bParticleSystem ? IsValidEdict(iParticleEntity) : IsValidEntity(iParticleEntity))
+			{
+				if (Taunt.RefireInterval > 0 && !bParticleSystem)
+				{
+					DataPack hTauntDataPack = new DataPack();
+					hTauntDataPack.WriteCell(GetClientUserId(iClient));
+					hTauntDataPack.WriteCell(iParticleIndex);
+					hTauntDataPack.WriteCell(EntIndexToEntRef(iParticleEntity));
+					
+					CreateTimer(Taunt.RefireInterval, RefireTauntParticle, hTauntDataPack, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE | TIMER_DATA_HNDL_CLOSE);
+				}
+				
 				g_iClientParticleEntity[iClient] = EntIndexToEntRef(iParticleEntity);
 			}
 		}
 	}
+}
+
+public Action RefireTauntParticle(Handle hTimer, DataPack hTauntDataPack)
+{
+	hTauntDataPack.Reset();
+	
+	int iClient         = GetClientOfUserId(hTauntDataPack.ReadCell());
+	int iParticleIndex  = hTauntDataPack.ReadCell();
+	int iParticleEntity = EntRefToEntIndex(hTauntDataPack.ReadCell());
+	
+	if (!iParticleIndex || iParticleEntity == -1 || !iClient || !IsClientInGame(iClient))
+	{
+		return Plugin_Stop;
+	}
+	
+	char strEffectName[PLATFORM_MAX_PATH];
+	
+	// https://forums.alliedmods.net/showthread.php?t=235329
+	SetVariantString("ParticleEffectStop");
+	AcceptEntityInput(iParticleEntity, "DispatchEffect");
+	
+	TF2Econ_GetParticleAttributeSystemName(iParticleIndex, strEffectName, sizeof(strEffectName));
+	CreateTempParticle(strEffectName, _, _,  _, iParticleEntity, PATTACH_ABSORIGIN_FOLLOW, _, _);
+	TE_SendToAll();
+	
+	return Plugin_Continue;
 }
 
 public void TF2_OnConditionRemoved(int iClient, TFCond iCondition)
@@ -337,11 +546,26 @@ public void TF2_OnConditionRemoved(int iClient, TFCond iCondition)
 	if (iCondition == TFCond_Taunting)
 	{
 		int iParticleEntity = EntRefToEntIndex(g_iClientParticleEntity[iClient]);
-		
-		if (iParticleEntity && IsValidEntity(iParticleEntity))
+		if (iParticleEntity != -1)
 		{
-			RemoveEntity(iParticleEntity);
-			g_iClientParticleEntity[iClient] = 0;
+			char strEntityClassname[64]; GetEntityClassname(iParticleEntity, strEntityClassname, sizeof(strEntityClassname));
+			
+			if (StrEqual(strEntityClassname, "info_particle_system"))
+			{
+				if (IsValidEdict(iParticleEntity))
+				{
+					RemoveEdict(iParticleEntity);
+					g_iClientParticleEntity[iClient] = -1;
+				}
+			}
+			else
+			{
+				if (IsValidEntity(iParticleEntity))
+				{
+					RemoveEntity(iParticleEntity);
+					g_iClientParticleEntity[iClient] = -1;
+				}
+			}
 		}
 	}
 }
@@ -353,9 +577,19 @@ public void TF2_OnConditionRemoved(int iClient, TFCond iCondition)
 
 stock int CreateAttachedParticle(int iClient, int iParticleIndex)
 {
-	int iEntity = CreateEntityByName("tf_wearable"); // I just guessed it, nothing else
+	UnusualTauntConfig Taunt;
+	bool bParticleSystem = false;
 	
-	if (iEntity && IsValidEntity(iEntity))
+	int iUnusualConfigIndex = g_hUnusualTauntsList == null ? -1 : g_hUnusualTauntsList.FindValue(iParticleIndex, 0);
+	if (iUnusualConfigIndex != -1)
+	{
+		g_hUnusualTauntsList.GetArray(iUnusualConfigIndex, Taunt);
+		bParticleSystem = Taunt.UseParticleSystem;
+	}
+	
+	int iEntity = CreateEntityByName(bParticleSystem ? "info_particle_system" : "tf_wearable"); // I just guessed it, nothing else
+	
+	if (bParticleSystem ? IsValidEdict(iEntity) : IsValidEntity(iEntity))
 	{
 		float fPosition[3];
 		GetEntPropVector(iClient, Prop_Send, "m_vecOrigin", fPosition);
@@ -367,28 +601,59 @@ stock int CreateAttachedParticle(int iClient, int iParticleIndex)
 		{
 			LogError("Failed to get the system name of the particle attribute index. Removing entity.");
 			
-			RemoveEntity(iEntity);
+			bParticleSystem ? RemoveEdict(iEntity) : RemoveEntity(iEntity);
 			return -1;
 		}
 		
-		DispatchSpawn(iEntity);
-		
-		// EF_BONEMERGE_FASTCULL moves the entity in an undesired position (in the middle of the client)
-		// Also setting all these netprops before dispatching spawn resets them for some reason
-		SetEntProp(iEntity, Prop_Send, "m_fEffects", EF_BONEMERGE | EF_NOSHADOW | EF_PARENT_ANIMATES | EF_NODRAW | EF_NORECEIVESHADOW);
-		SetEntProp(iEntity, Prop_Send, "m_CollisionGroup", 0);    // COLLISION_GROUP_NONE
-		SetEntProp(iEntity, Prop_Send, "m_usSolidFlags", 0x0004); // FSOLID_NOT_SOLID
-		SetEntProp(iEntity, Prop_Send, "m_nSolidType", 0);        // SOLID_NONE
-		SetEntProp(iEntity, Prop_Send, "m_bValidatedAttachedEntity", 1); // Visibility
-		
-		char strModelName[PLATFORM_MAX_PATH];
-		GetEntPropString(iClient, Prop_Data, "m_ModelName", strModelName, sizeof(strModelName));
-		SetEntityModel(iEntity, strModelName);
-		
-		SetVariantString("!activator");
-		AcceptEntityInput(iEntity, "SetParent", iClient, iEntity);
-		
-		CreateTempParticle(strEffectName, fPosition, _,  _, iEntity, PATTACH_ABSORIGIN_FOLLOW, _, _);
+		if (!bParticleSystem)
+		{
+			DispatchSpawn(iEntity);
+			
+			// EF_BONEMERGE_FASTCULL moves the entity in an undesired position (in the middle of the client)
+			// Also setting all these netprops before dispatching spawn resets them for some reason
+			SetEntProp(iEntity, Prop_Send, "m_fEffects", EF_BONEMERGE | EF_NOSHADOW | EF_PARENT_ANIMATES | EF_NODRAW | EF_NORECEIVESHADOW);
+			SetEntProp(iEntity, Prop_Send, "m_CollisionGroup", 0);    // COLLISION_GROUP_NONE
+			SetEntProp(iEntity, Prop_Send, "m_usSolidFlags", 0x0004); // FSOLID_NOT_SOLID
+			SetEntProp(iEntity, Prop_Send, "m_nSolidType", 0);        // SOLID_NONE
+			SetEntProp(iEntity, Prop_Send, "m_bValidatedAttachedEntity", 1); // Visibility
+			
+			char strModelName[PLATFORM_MAX_PATH];
+			GetEntPropString(iClient, Prop_Data, "m_ModelName", strModelName, sizeof(strModelName));
+			SetEntityModel(iEntity, strModelName);
+			
+			SetVariantString("!activator");
+			AcceptEntityInput(iEntity, "SetParent", iClient, iEntity);
+			
+			CreateTempParticle(strEffectName, fPosition, _,  _, iEntity, PATTACH_ABSORIGIN_FOLLOW, _, _);
+			
+			TE_SendToAll();
+		}
+		else
+		{
+			DispatchKeyValue(iEntity, "effect_name", strEffectName);
+			DispatchSpawn(iEntity);
+			ActivateEntity(iEntity);
+			
+			SetVariantString("!activator");
+			AcceptEntityInput(iEntity, "SetParent", iClient, iEntity);
+			
+			AcceptEntityInput(iEntity, "Start");
+			
+			if (Taunt.RefireInterval > 0)
+			{
+				char strBuffer[64];
+				FormatEx(strBuffer, sizeof(strBuffer), "OnUser1 !self:Stop::%f:-1", Taunt.RefireInterval);
+				SetVariantString(strBuffer);
+				AcceptEntityInput(iEntity, "AddOutput");
+				FormatEx(strBuffer, sizeof(strBuffer), "OnUser1 !self:Start::%f:-1", Taunt.RefireInterval + GetConVarFloat(g_hCvarVariation));
+				SetVariantString(strBuffer);
+				AcceptEntityInput(iEntity, "AddOutput");
+				FormatEx(strBuffer, sizeof(strBuffer), "OnUser1 !self:FireUser1::%f:-1", Taunt.RefireInterval);
+				SetVariantString(strBuffer);
+				AcceptEntityInput(iEntity, "AddOutput");
+				AcceptEntityInput(iEntity, "FireUser1");
+			}
+		}
 	}
 	
 	return iEntity;
@@ -448,8 +713,6 @@ stock void CreateTempParticle(const char[] strParticle,
 	}
 	
 	TE_WriteNum("m_bResetParticles", bResetParticles ? 1 : 0);
-	
-	TE_SendToAll();
 }
 
 stock int PrecacheParticleSystem(const char[] particleSystem)
@@ -503,9 +766,9 @@ stock int FindStringIndex2(int tableidx, const char[] str)
 	https://github.com/DoctorMcKay/sourcemod-plugins/blob/master/scripting/enhanced_items.sp
 */
 
-bool LocalizeToken(int iClient, const char[] strToken, char[] strOutput, int strMaxLen)
+bool LocalizeToken(const char[] strToken, char[] strOutput, int strMaxLen)
 {
-	StringMap hLang = GetLanguage(iClient);
+	StringMap hLang = GetLanguage();
 	
 	if(hLang == null)
 	{
@@ -518,25 +781,16 @@ bool LocalizeToken(int iClient, const char[] strToken, char[] strOutput, int str
 	}
 }
 
-StringMap GetLanguage(int iClient)
+StringMap GetLanguage()
 {
-	int iLanguageNum = (iClient == LANG_SERVER ? GetServerLanguage() : GetClientLanguage(iClient));
-	char strLanguage[64];
-	GetLanguageInfo(iLanguageNum, _, _, strLanguage, sizeof(strLanguage));
-	
 	StringMap hLang;
-	if(!g_hLanguages.GetValue(strLanguage, hLang))
+	if(!g_hLanguages.GetValue("english", hLang))
 	{
-		hLang = ParseLanguage(strLanguage);
-		g_hLanguages.SetValue(strLanguage, hLang);
+		hLang = ParseLanguage("english");
+		g_hLanguages.SetValue("english", hLang);
 	}
 	
-	if(hLang == null && iClient != LANG_SERVER)
-	{
-		// If the client's language isn't valid, fall back to the server's language
-		return GetLanguage(LANG_SERVER);
-	}
-	else if(hLang == null)
+	if(hLang == null)
 	{
 		return null;
 	}
