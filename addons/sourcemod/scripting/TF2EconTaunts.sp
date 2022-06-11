@@ -2,7 +2,7 @@
 #pragma newdecls required
 
 #define PLUGIN_AUTHOR "x07x08"
-#define PLUGIN_VERSION "1.1.0"
+#define PLUGIN_VERSION "1.1.1"
 
 #define DEFINDEX_UNDEFINED 65535
 
@@ -22,7 +22,7 @@
 #include <tf_econ_data>
 
 Handle    g_hPlayTaunt;
-StringMap g_hLanguages;
+StringMap g_hTokensMap;
 int       g_iClientParticleIndex [MAXPLAYERS + 1];
 int       g_iClientParticleEntity[MAXPLAYERS + 1] = {-1, ...};
 bool      g_bClientShouldSee     [MAXPLAYERS + 1];
@@ -93,10 +93,10 @@ public void OnPluginStart()
 	
 	g_hCvarVariation = CreateConVar("sm_econtaunts_refire", "0.05", "Time variation between particle restarts.", _, true, 0.0);
 	
-	HookEvent("player_spawn", OnPlayerSpawn);
+	// OnClientPutInServer makes the particle spawn at [0, 0, 0], no idea why.
+	HookEvent("player_team", OnPlayerTeam);
 	
-	g_hLanguages = new StringMap();
-	g_hLanguages.SetValue("english", ParseLanguage("english"));
+	g_hTokensMap = ParseLanguage("english");
 }
 
 public void OnClientDisconnect(int iClient)
@@ -118,14 +118,14 @@ public void OnMapStart()
 	ParseTauntConfig();
 }
 
-public Action OnPlayerSpawn(Event hEvent, char[] strEventName, bool bDontBroadcast)
+public void OnPlayerTeam(Event hEvent, char[] strEventName, bool bDontBroadcast)
 {
 	int iClient = GetClientOfUserId(hEvent.GetInt("userid"));
 	
 	char strEffectName[PLATFORM_MAX_PATH];
 	int  iParticleIndex, iParticleEntity;
 	
-	if (GetClientTeam(iClient) > 0 && !g_bClientShouldSee[iClient])
+	if (hEvent.GetInt("oldteam") == 0 && !g_bClientShouldSee[iClient])
 	{
 		for (int iIndex = 1; iIndex <= MaxClients; iIndex++)
 		{
@@ -154,8 +154,6 @@ public Action OnPlayerSpawn(Event hEvent, char[] strEventName, bool bDontBroadca
 		
 		g_bClientShouldSee[iClient] = true;
 	}
-	
-	return Plugin_Continue;
 }
 
 public Action CmdTauntMenu(int iClient, int iArgs)
@@ -242,7 +240,7 @@ public Action CmdUnusualTauntsMenu(int iClient, int iArgs)
 	
 	for (int iEntry = 0; iEntry < iUnusualsListSize; iEntry++)
 	{
-		UnusualTauntConfig Taunt;
+		UnusualTauntConfig UnusualTaunt;
 		bool bUseUnusual = false;
 		
 		int iUnusualIndex = hUnusualsList.Get(iEntry);
@@ -259,8 +257,8 @@ public Action CmdUnusualTauntsMenu(int iClient, int iArgs)
 		
 		if (iUnusualConfigIndex != -1)
 		{
-			g_hUnusualTauntsList.GetArray(iUnusualConfigIndex, Taunt);
-			bUseUnusual = Taunt.Disabled;
+			g_hUnusualTauntsList.GetArray(iUnusualConfigIndex, UnusualTaunt);
+			bUseUnusual = UnusualTaunt.Disabled;
 		}
 		
 		hMenu.AddItem(strUnusualIndex, strLocalizedName, bUseUnusual ? ITEMDRAW_DISABLED : ITEMDRAW_DEFAULT);
@@ -414,46 +412,43 @@ void ParseTauntConfig()
 	{
 		KeyValues kvTauntConfig = new KeyValues("EconTaunts");
 		
-		if (kvTauntConfig.ImportFromFile(strFilePath))
+		if (kvTauntConfig.ImportFromFile(strFilePath) && kvTauntConfig.GotoFirstSubKey())
 		{
-			if (kvTauntConfig.GotoFirstSubKey())
+			g_hUnusualTauntsList = new ArrayList(sizeof(UnusualTauntConfig));
+			
+			do
 			{
-				g_hUnusualTauntsList = new ArrayList(sizeof(UnusualTauntConfig));
-				
-				do
-				{
-					ParseTaunts(kvTauntConfig);
-				}
-				while (kvTauntConfig.GotoNextKey());
+				ParseUnusualTaunt(kvTauntConfig);
 			}
+			while (kvTauntConfig.GotoNextKey());
 		}
 		
 		delete kvTauntConfig;
 	}
 }
 
-void ParseTaunts(KeyValues kvConfig)
+void ParseUnusualTaunt(KeyValues kvConfig)
 {
 	kvConfig.GotoFirstSubKey();
 	
-	char strTauntIndex[16];
+	char strUnusualTauntIndex[16];
 	int  iTauntIndex;
 	
 	do
 	{
-		if (kvConfig.GetSectionName(strTauntIndex, sizeof(strTauntIndex)))
+		if (kvConfig.GetSectionName(strUnusualTauntIndex, sizeof(strUnusualTauntIndex)))
 		{
-			iTauntIndex = StringToInt(strTauntIndex);
-			if (iTauntIndex > 0 && !IsTauntAdded(iTauntIndex))
+			iTauntIndex = StringToInt(strUnusualTauntIndex);
+			if (iTauntIndex > 0 && !IsUnusualTauntAdded(iTauntIndex))
 			{
-				UnusualTauntConfig Taunt;
+				UnusualTauntConfig UnusualTaunt;
 				
-				Taunt.ParticleIndex     = iTauntIndex;
-				Taunt.RefireInterval    = kvConfig.GetFloat("refire interval", 0.0);
-				Taunt.Disabled          = !!kvConfig.GetNum("disabled", 0);
-				Taunt.UseParticleSystem = !!kvConfig.GetNum("use particle system", 0);
+				UnusualTaunt.ParticleIndex     = iTauntIndex;
+				UnusualTaunt.RefireInterval    = kvConfig.GetFloat("refire interval", 0.0);
+				UnusualTaunt.Disabled          = !!kvConfig.GetNum("disabled", 0);
+				UnusualTaunt.UseParticleSystem = !!kvConfig.GetNum("use particle system", 0);
 				
-				g_hUnusualTauntsList.PushArray(Taunt);
+				g_hUnusualTauntsList.PushArray(UnusualTaunt);
 			}
 		}
 	}
@@ -461,16 +456,16 @@ void ParseTaunts(KeyValues kvConfig)
 	kvConfig.GoBack();
 }
 
-bool IsTauntAdded(int iTauntIndex)
+bool IsUnusualTauntAdded(int iTauntIndex)
 {
-	UnusualTauntConfig Taunt;
+	UnusualTauntConfig UnusualTaunt;
 	
-	int iArrayIndex = g_hUnusualTauntsList == null ? -1 : g_hUnusualTauntsList.FindValue(iTauntIndex, 0);
+	int iArrayIndex = g_hUnusualTauntsList.FindValue(iTauntIndex, 0);
 	if (iArrayIndex != -1)
 	{
-		if (g_hUnusualTauntsList.GetArray(iArrayIndex, Taunt) > 0)
+		if (g_hUnusualTauntsList.GetArray(iArrayIndex, UnusualTaunt) > 0)
 		{
-			LogMessage("Taunt Index : %i found twice, skipping.", Taunt.ParticleIndex);
+			LogMessage("Taunt Index : %i found twice, skipping.", UnusualTaunt.ParticleIndex);
 			return true;
 		}
 	}
@@ -486,27 +481,27 @@ public void TF2_OnConditionAdded(int iClient, TFCond iCondition)
 		
 		if (iParticleIndex != 0)
 		{
-			UnusualTauntConfig Taunt;
+			UnusualTauntConfig UnusualTaunt;
 			bool bParticleSystem = false;
 			
 			int iUnusualConfigIndex = g_hUnusualTauntsList == null ? -1 : g_hUnusualTauntsList.FindValue(iParticleIndex, 0);
 			if (iUnusualConfigIndex != -1)
 			{
-				g_hUnusualTauntsList.GetArray(iUnusualConfigIndex, Taunt);
-				bParticleSystem = Taunt.UseParticleSystem;
+				g_hUnusualTauntsList.GetArray(iUnusualConfigIndex, UnusualTaunt);
+				bParticleSystem = UnusualTaunt.UseParticleSystem;
 			}
 			
 			int iParticleEntity = CreateAttachedParticle(iClient, iParticleIndex);
 			if (bParticleSystem ? IsValidEdict(iParticleEntity) : IsValidEntity(iParticleEntity))
 			{
-				if (Taunt.RefireInterval > 0 && !bParticleSystem)
+				if (UnusualTaunt.RefireInterval > 0 && !bParticleSystem)
 				{
 					DataPack hTauntDataPack = new DataPack();
 					hTauntDataPack.WriteCell(GetClientUserId(iClient));
 					hTauntDataPack.WriteCell(iParticleIndex);
 					hTauntDataPack.WriteCell(EntIndexToEntRef(iParticleEntity));
 					
-					CreateTimer(Taunt.RefireInterval, RefireTauntParticle, hTauntDataPack, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE | TIMER_DATA_HNDL_CLOSE);
+					CreateTimer(UnusualTaunt.RefireInterval, RefireTauntParticle, hTauntDataPack, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE | TIMER_DATA_HNDL_CLOSE);
 				}
 				
 				g_iClientParticleEntity[iClient] = EntIndexToEntRef(iParticleEntity);
@@ -577,17 +572,18 @@ public void TF2_OnConditionRemoved(int iClient, TFCond iCondition)
 
 stock int CreateAttachedParticle(int iClient, int iParticleIndex)
 {
-	UnusualTauntConfig Taunt;
+	UnusualTauntConfig UnusualTaunt;
 	bool bParticleSystem = false;
 	
 	int iUnusualConfigIndex = g_hUnusualTauntsList == null ? -1 : g_hUnusualTauntsList.FindValue(iParticleIndex, 0);
 	if (iUnusualConfigIndex != -1)
 	{
-		g_hUnusualTauntsList.GetArray(iUnusualConfigIndex, Taunt);
-		bParticleSystem = Taunt.UseParticleSystem;
+		g_hUnusualTauntsList.GetArray(iUnusualConfigIndex, UnusualTaunt);
+		bParticleSystem = UnusualTaunt.UseParticleSystem;
 	}
 	
-	int iEntity = CreateEntityByName(bParticleSystem ? "info_particle_system" : "tf_wearable"); // I just guessed it, nothing else
+	// I just guessed it, nothing else
+	int iEntity = CreateEntityByName(bParticleSystem ? "info_particle_system" : "tf_wearable");
 	
 	if (bParticleSystem ? IsValidEdict(iEntity) : IsValidEntity(iEntity))
 	{
@@ -639,16 +635,16 @@ stock int CreateAttachedParticle(int iClient, int iParticleIndex)
 			
 			AcceptEntityInput(iEntity, "Start");
 			
-			if (Taunt.RefireInterval > 0)
+			if (UnusualTaunt.RefireInterval > 0)
 			{
 				char strBuffer[64];
-				FormatEx(strBuffer, sizeof(strBuffer), "OnUser1 !self:Stop::%f:-1", Taunt.RefireInterval);
+				FormatEx(strBuffer, sizeof(strBuffer), "OnUser1 !self:Stop::%f:-1", UnusualTaunt.RefireInterval);
 				SetVariantString(strBuffer);
 				AcceptEntityInput(iEntity, "AddOutput");
-				FormatEx(strBuffer, sizeof(strBuffer), "OnUser1 !self:Start::%f:-1", Taunt.RefireInterval + GetConVarFloat(g_hCvarVariation));
+				FormatEx(strBuffer, sizeof(strBuffer), "OnUser1 !self:Start::%f:-1", UnusualTaunt.RefireInterval + GetConVarFloat(g_hCvarVariation));
 				SetVariantString(strBuffer);
 				AcceptEntityInput(iEntity, "AddOutput");
-				FormatEx(strBuffer, sizeof(strBuffer), "OnUser1 !self:FireUser1::%f:-1", Taunt.RefireInterval);
+				FormatEx(strBuffer, sizeof(strBuffer), "OnUser1 !self:FireUser1::%f:-1", UnusualTaunt.RefireInterval);
 				SetVariantString(strBuffer);
 				AcceptEntityInput(iEntity, "AddOutput");
 				AcceptEntityInput(iEntity, "FireUser1");
@@ -715,46 +711,46 @@ stock void CreateTempParticle(const char[] strParticle,
 	TE_WriteNum("m_bResetParticles", bResetParticles ? 1 : 0);
 }
 
-stock int PrecacheParticleSystem(const char[] particleSystem)
+stock int PrecacheParticleSystem(const char[] strParticleSystem)
 {
-	static int particleEffectNames = INVALID_STRING_TABLE;
+	static int iParticleEffectNames = INVALID_STRING_TABLE;
 	
-	if (particleEffectNames == INVALID_STRING_TABLE)
+	if (iParticleEffectNames == INVALID_STRING_TABLE)
 	{
-		if ((particleEffectNames = FindStringTable("ParticleEffectNames")) == INVALID_STRING_TABLE)
+		if ((iParticleEffectNames = FindStringTable("ParticleEffectNames")) == INVALID_STRING_TABLE)
 		{
 			return INVALID_STRING_INDEX;
 		}
 	}
 	
-	int index = FindStringIndex2(particleEffectNames, particleSystem);
-	if (index == INVALID_STRING_INDEX)
+	int iIndex = FindStringIndex2(iParticleEffectNames, strParticleSystem);
+	if (iIndex == INVALID_STRING_INDEX)
 	{
-		int numStrings = GetStringTableNumStrings(particleEffectNames);
-		if (numStrings >= GetStringTableMaxStrings(particleEffectNames))
+		int iNumStrings = GetStringTableNumStrings(iParticleEffectNames);
+		if (iNumStrings >= GetStringTableMaxStrings(iParticleEffectNames))
 		{
 			return INVALID_STRING_INDEX;
 		}
 		
-		AddToStringTable(particleEffectNames, particleSystem);
-		index = numStrings;
+		AddToStringTable(iParticleEffectNames, strParticleSystem);
+		iIndex = iNumStrings;
 	}
 	
-	return index;
+	return iIndex;
 }
 
-stock int FindStringIndex2(int tableidx, const char[] str)
+stock int FindStringIndex2(int iTableIndex, const char[] strString)
 {
-	char buf[1024];
+	char strBuffer[1024];
 	
-	int numStrings = GetStringTableNumStrings(tableidx);
-	for (int i=0; i < numStrings; i++)
+	int iNumStrings = GetStringTableNumStrings(iTableIndex);
+	for (int iIndex = 0; iIndex < iNumStrings; iIndex++)
 	{
-		ReadStringTable(tableidx, i, buf, sizeof(buf));
+		ReadStringTable(iTableIndex, iIndex, strBuffer, sizeof(strBuffer));
 		
-		if (StrEqual(buf, str))
+		if (StrEqual(strBuffer, strString))
 		{
-			return i;
+			return iIndex;
 		}
 	}
 	
@@ -768,34 +764,15 @@ stock int FindStringIndex2(int tableidx, const char[] str)
 
 bool LocalizeToken(const char[] strToken, char[] strOutput, int strMaxLen)
 {
-	StringMap hLang = GetLanguage();
-	
-	if(hLang == null)
+	if(g_hTokensMap == null)
 	{
 		LogError("Unable to localize token for server language!");
 		return false;
 	}
 	else
 	{
-		return hLang.GetString(strToken, strOutput, strMaxLen);
+		return g_hTokensMap.GetString(strToken, strOutput, strMaxLen);
 	}
-}
-
-StringMap GetLanguage()
-{
-	StringMap hLang;
-	if(!g_hLanguages.GetValue("english", hLang))
-	{
-		hLang = ParseLanguage("english");
-		g_hLanguages.SetValue("english", hLang);
-	}
-	
-	if(hLang == null)
-	{
-		return null;
-	}
-	
-	return hLang;
 }
 
 StringMap ParseLanguage(const char[] strLanguage)
@@ -880,5 +857,9 @@ void HandleLangLine(char[] strLine, StringMap hLang)
 	}
 	
 	BreakString(strLine[iPos], strValue, sizeof(strValue));
-	hLang.SetString(strToken, strValue);
+	
+	if (StrContains(strToken, "Attrib_Particle") != -1) // Only particles should be added
+	{
+		hLang.SetString(strToken, strValue);
+	}
 }
