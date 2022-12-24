@@ -6,14 +6,14 @@ Obviously, as the name implies, it uses [TFEconData](https://github.com/nosoop/S
 
 # Commands
 
-  | Commands           | Description                               |
-  |--------------------|-------------------------------------------|
-  | `sm_taunt`         | Displays the taunts menu                  |
-  | `sm_taunts`        | Alternative to `sm_taunt`                 |
-  | `sm_unusualtaunt`  | Displays the unusual taunt particles menu |
-  | `sm_unusualtaunts` | Alternative to `sm_unusualtaunt`          |
-  | `sm_utaunt`        | Alternative to `sm_unusualtaunt`          |
-  | `sm_utaunts`       | Alternative to `sm_unusualtaunt`          |
+  | Commands           | Description                                                                                  |
+  |--------------------|--------------------------------------------------------------------------------------------- |
+  | `sm_taunt`         | Displays the taunts menu. Follow the command with a valid taunt ID to automatically play it. |
+  | `sm_taunts`        | Alternative to `sm_taunt`                                                                    |
+  | `sm_unusualtaunt`  | Displays the unusual taunt particles menu                                                    |
+  | `sm_unusualtaunts` | Alternative to `sm_unusualtaunt`                                                             |
+  | `sm_utaunt`        | Alternative to `sm_unusualtaunt`                                                             |
+  | `sm_utaunts`       | Alternative to `sm_unusualtaunt`                                                             |
 
 # Issues
 
