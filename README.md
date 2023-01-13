@@ -28,7 +28,7 @@ If there are any other issues, please report them using the [Issues](https://git
 1. Install [TFEconData](https://github.com/nosoop/SM-TFEconData).
 2. Download the plugin (go to [releases](https://github.com/x07x08/TF2-Econ-Taunts/releases) or clone the repository).
 3. Drag and drop the files into your server's `tf` directory.
-4. If some (or all) taunt props are not visible, also install [this](https://github.com/404UNFca/TF2ServersidePlayerAttachmentFixer).
+4. If some (or all) taunt props are not visible, also install [this](https://forums.alliedmods.net/showpost.php?p=2796688&postcount=19).
 
 # Credits
 
