@@ -14,6 +14,14 @@ Obviously, as the name implies, it uses [TFEconData](https://github.com/nosoop/S
   | `sm_unusualtaunts` | Alternative to `sm_unusualtaunt`                                                             |
   | `sm_utaunt`        | Alternative to `sm_unusualtaunt`                                                             |
   | `sm_utaunts`       | Alternative to `sm_unusualtaunt`                                                             |
+  | `sm_refreshtaunts` | Reloads the taunts configuration file                                                        |
+
+# ConVars
+
+  | ConVars                       | Description                                                                    | Default value    |
+  |-------------------------------|--------------------------------------------------------------------------------|------------------|
+  | `sm_econtaunts_refire`        | Time variation between particle restarts. (necessary for info_particle_system) | `0.05` (seconds) |
+  | `sm_econtaunts_defaulttaunts` | Add unusuals to default taunts?                                                | `0` (disabled)   |
 
 # Issues
 
