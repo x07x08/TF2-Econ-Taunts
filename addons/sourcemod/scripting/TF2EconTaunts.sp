@@ -7,7 +7,7 @@
 #define PLUGIN_NAME        "[TF2] Econ Taunts"
 #define PLUGIN_AUTHOR      "x07x08"
 #define PLUGIN_DESCRIPTION "A simple taunts menu plugin"
-#define PLUGIN_VERSION     "1.3.0"
+#define PLUGIN_VERSION     "1.3.1"
 #define PLUGIN_URL         "https://github.com/x07x08/TF2-Econ-Taunts"
 
 #define DEFINDEX_UNDEFINED 65535
@@ -59,12 +59,7 @@ public Action CmdTaunt(int iClient, int iArgs)
 	Menu hMenu = new Menu(TauntMenuHandler);
 	hMenu.SetTitle("Taunts :");
 	
-	static ArrayList hTauntsList = null;
-	
-	if (hTauntsList == null)
-	{
-		hTauntsList = TF2Econ_GetItemList(FilterTaunts, TF2_GetPlayerClass(iClient));
-	}
+	ArrayList hTauntsList = TF2Econ_GetItemList(FilterTaunts, TF2_GetPlayerClass(iClient));
 	
 	int iTauntListSize = hTauntsList.Length;
 	
@@ -83,6 +78,8 @@ public Action CmdTaunt(int iClient, int iArgs)
 	}
 	
 	hMenu.Display(iClient, MENU_TIME_FOREVER);
+	
+	delete hTauntsList;
 	
 	return Plugin_Handled;
 }
