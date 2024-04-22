@@ -42,5 +42,5 @@ If there are any other issues, please report them using the [Issues](https://git
 
 1. [Taunt 'em](https://forums.alliedmods.net/showthread.php?p=2157489) by FlaminSarge. ([Alt. Link](https://github.com/FlaminSarge/tf_tauntem))
 2. "[TF2 Item Management Plugins](https://github.com/punteroo/TF2-Item-Plugins)" by punteroo.
-3. [TFEconData](https://github.com/nosoop/SM-TFEconData) by nosoop.
+3. [TFEconData](https://github.com/nosoop/SM-TFEconData) & [CSRD-BotTauntRandomizer](https://git.csrd.science/nosoop/CSRD-BotTauntRandomizer) by nosoop.
 4. [TF2 Unusual Taunts](https://forums.alliedmods.net/showthread.php?p=2722944) by StrikeR14. ([Alt. Link](https://github.com/nushnush/TF2-Unusual-Taunts))
